@@ -1,11 +1,11 @@
-##parse.py
+## parse.py
 This script will parse the square legacy orders export csv
 and parse it into useful useful csv's for workshops, tshirts, and reg
     
-####usage:
+#### usage:
 parse.py orders-legacy-DATE-DATE.csv
 
-####output:
+#### output:
 TYPE, fname, lname, email, detail
 
 where TYPE and detail may be:
@@ -20,9 +20,9 @@ This script pulls emails out of the orders-legacy-DATE.csv files
 and prints them in the lname,fname<email> format, one per line
 will convert the square legacy orders export csv into useful csvs
 
-####usage:
+#### usage:
 parse.py orders-legacy-DATE-DATE.csv
 
-####output:
+#### output:
 lname, fname <email>
 
