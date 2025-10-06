@@ -23,18 +23,24 @@ with open(filename,'r') as infile:
                 for i in range(int(row[35])):
                     #get the workshop time and print it
                     workshop=row[34][row[34].find(":")+2:row[34].find(":",14)]
-                    print(",".join(["workshop",workshop,fname,lname,email]))
+                    print(",".join(["workshop",fname,lname,email,workshop]))
             else:
                 #foreach con registration
                 for i in range(int(row[35])):
                     item=row[34]
                     desc="other"
-                    size=""
+                    size="None"
                     level=""
-                    if item.count(",")==2:
+                    #2025 looks like "Regular, Supporter : 1, Fitted Cut L : 1"
+                    if (item.count(",")==2):
                         desc, level, size = item.split(", ")
                         level=level[:-4]
                         size=size[:-4]
-                    print(",".join([desc,lname,fname,email,level,size]))
+                        if (level=="None") or (level.count("Cut")>0):
+                            level,size=size,level
+                    if size != "None":
+                        print(",".join(["Shirt",lname,fname,email,size]))
+                    print(",".join(["Registration",lname,fname,email,level]))
+
 
 
