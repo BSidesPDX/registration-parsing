@@ -28,16 +28,13 @@ with open(filename,'r') as infile:
                 #foreach con registration
                 for i in range(int(row[35])):
                     item=row[34]
-                    size="None"
-                    level="None"
-                    #if before,during tshirt sales:
-                    if len(item)>312:
-                        delimiter=item.rfind(":")
-                        size=item[delimiter+2:]
-                        if size=="None": size=""
-                        level=item[273:delimiter-71]
-                    else:
-                        level=item[273:]
-                    print(",".join(["Registration",lname,fname,email,level,size]))
+                    desc="other"
+                    size=""
+                    level=""
+                    if item.count(",")==2:
+                        desc, level, size = item.split(", ")
+                        level=level[:-4]
+                        size=size[:-4]
+                    print(",".join([desc,lname,fname,email,level,size]))
 
 
