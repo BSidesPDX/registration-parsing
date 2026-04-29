@@ -28,6 +28,7 @@ def load_data() -> pl.DataFrame:
     after = df.shape[0]
     if before != after:
         print(f"Dropped {before - after} rows with empty Item Name")
+    df = df.sort("Order Date", descending=True)
     return df
 
 
@@ -35,7 +36,10 @@ def print_summary(df: pl.DataFrame) -> None:
     print(f"\n[{df.shape[0]} rows x {df.shape[1]} columns]")
     if df.shape[0] > 0:
         display_cols = [c for c in SHOW_COLUMNS if c in df.columns]
-        print(df.select(display_cols).head(10))
+        with pl.Config(
+            tbl_hide_column_data_types=True, tbl_hide_dtype_separator=True
+        ):
+            print(df.select(display_cols).head(20))
 
 
 def print_full(df: pl.DataFrame) -> None:
@@ -43,7 +47,13 @@ def print_full(df: pl.DataFrame) -> None:
         print("No rows to display.")
         return
     display_cols = [c for c in SHOW_COLUMNS if c in df.columns]
-    with pl.Config(tbl_rows=-1, tbl_cols=len(display_cols), fmt_str_lengths=60):
+    with pl.Config(
+        tbl_rows=-1,
+        tbl_cols=len(display_cols),
+        fmt_str_lengths=60,
+        tbl_hide_column_data_types=True,
+        tbl_hide_dtype_separator=True,
+    ):
         print(df.select(display_cols))
 
 
@@ -146,7 +156,7 @@ def run_repl() -> None:
             if not arg:
                 print("Usage: export <filename.csv>")
                 continue
-            path = Path(arg)
+            path = Path("data") / arg
             df.write_csv(path)
             print(f"Exported {df.shape[0]} rows to {path}")
 
