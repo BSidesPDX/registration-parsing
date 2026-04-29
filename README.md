@@ -35,14 +35,17 @@ Launch the interactive query REPL:
 uv run python query.py
 ```
 
-Filters stack and can be reset. Example session:
+Select a conference (or all), then explore with filters. Example session:
 
 ```
 > item Hackboat
 > date 2026-03-01 2026-04-30
 > show
-> export hackboat-march-april.csv
+> regs
+> export regs hackboat-sailors.csv
+> sort name
 > reset
+> back
 ```
 
 Type `help` in the REPL for all commands.
