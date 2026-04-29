@@ -1,4 +1,4 @@
-"""Interactive REPL for exploring and querying Square order data."""
+"""Interactive REPL for exploring Square order registration data."""
 
 import re
 from pathlib import Path
@@ -11,16 +11,6 @@ pl.Config.set_tbl_hide_column_data_types(True)
 pl.Config.set_tbl_hide_dtype_separator(True)
 
 CONFERENCES = ["Hackboat", "BSidesPDX"]
-
-SHOW_COLUMNS = [
-    "Recipient Name",
-    "Recipient Email",
-    "Item Name",
-    "Item Variation",
-    "Item Modifiers",
-    "Order Date",
-    "Item Total Price",
-]
 
 ADDRESS_FIELDS = [
     "Recipient Address",
@@ -40,12 +30,12 @@ QTY_PREFIX = re.compile(r"^\s*\d+\s*x\s*", re.IGNORECASE)
 
 FILTER_COLUMNS = ["Recipient Name", "Recipient Email"]
 
-# friendly key -> (df column, default descending, regs-only)
+# friendly key -> (df column, default descending)
 SORTABLE = {
-    "date":  ("Order Date", True, False),
-    "name":  ("Recipient Name", False, False),
-    "email": ("Recipient Email", False, False),
-    "shirt": ("Shirt Sort Key", False, True),
+    "date":  ("Order Date", True),
+    "name":  ("Recipient Name", False),
+    "email": ("Recipient Email", False),
+    "shirt": ("Shirt Sort Key", False),
 }
 
 
@@ -95,23 +85,6 @@ def load_data() -> pl.DataFrame:
     return df.sort("Order Date", descending=True)
 
 
-def print_table(df: pl.DataFrame, columns: list[str] | None = None,
-                full: bool = False) -> None:
-    if columns is None:
-        columns = [c for c in SHOW_COLUMNS if c in df.columns] or df.columns
-    if df.shape[0] == 0:
-        print("No rows to display." if full else "\n[0 rows]")
-        return
-    if not full:
-        print(f"\n[{df.shape[0]} rows]")
-    view = df.select(columns) if full else df.select(columns).head(PREVIEW_ROWS)
-    if full:
-        with pl.Config(tbl_rows=-1, tbl_cols=len(columns), fmt_str_lengths=60):
-            print(view)
-    else:
-        print(view)
-
-
 def regs_view(df: pl.DataFrame, include_address: bool,
               sort_col: str, sort_desc: bool) -> pl.DataFrame:
     cols = ["Recipient Name", "Recipient Email", "Shirt Size", "Shirt Sort Key"]
@@ -126,10 +99,16 @@ def regs_view(df: pl.DataFrame, include_address: bool,
     })
 
 
-def show_summary(df: pl.DataFrame, include_address: bool,
-                 sort_key: str, sort_desc: bool) -> None:
-    col, _, _ = SORTABLE[sort_key]
-    print_table(regs_view(df, include_address, col, sort_desc), full=False)
+def print_table(df: pl.DataFrame, full: bool = False) -> None:
+    if df.shape[0] == 0:
+        print("\n[0 rows]")
+        return
+    if not full:
+        print(f"\n[{df.shape[0]} rows]")
+        print(df.head(PREVIEW_ROWS))
+    else:
+        with pl.Config(tbl_rows=-1, tbl_cols=df.shape[1], fmt_str_lengths=60):
+            print(df)
 
 
 def print_help() -> None:
@@ -138,15 +117,12 @@ def print_help() -> None:
 Commands:
   filter <text>          Filter by name or email
   range <start> <end>    Filter by date range (YYYY-MM-DD or YYYY/MM/DD)
-  regs                   Switch to registration view (Name, Email, Shirt, Date)
-  raw                    Switch to raw data view (all columns)
-  full                   Show all rows of current view (untruncated)
-  sort <col>             Sort results (date|name|email|shirt, toggles asc/desc)
-  address                Toggle address column in registration views
-  columns                List all available columns
+  sort <col>             Sort (date|name|email|shirt, toggles asc/desc)
+  address                Toggle address column
   count                  Show current row count
-  reset                  Reset to conference baseline
-  export <file.csv>      Export current view to CSV
+  full                   Show all rows (untruncated)
+  reset                  Clear all filters
+  export <filename>      Export to CSV
   back                   Return to conference selection
   help                   Show this help
   quit / exit            Exit
@@ -191,15 +167,10 @@ def run() -> None:
     include_address = False
     sort_key = "date"
     sort_desc = SORTABLE[sort_key][1]
-    view_mode = "regs"  # "regs" or "raw"
 
-    def show_current(df: pl.DataFrame, full: bool = False) -> None:
-        """Display using the current view mode."""
-        col, _, _ = SORTABLE[sort_key]
-        if view_mode == "regs":
-            print_table(regs_view(df, include_address, col, sort_desc), full=full)
-        else:
-            print_table(df, full=full)
+    def show(df: pl.DataFrame, full: bool = False) -> None:
+        col, _ = SORTABLE[sort_key]
+        print_table(regs_view(df, include_address, col, sort_desc), full=full)
 
     while True:
         base = select_conference(all_data)
@@ -207,7 +178,7 @@ def run() -> None:
             break
 
         df = base.clone()
-        show_current(df)
+        show(df)
 
         while True:
             try:
@@ -235,54 +206,34 @@ def run() -> None:
 
             elif cmd == "reset":
                 df = base.clone()
-                col, _, regs_only = SORTABLE[sort_key]
-                if not regs_only:
-                    df = df.sort(col, descending=sort_desc)
                 print("Filters cleared.")
-                show_current(df)
+                show(df)
 
             elif cmd == "count":
                 print(f"{df.shape[0]} rows")
 
-            elif cmd == "columns":
-                for i, col in enumerate(df.columns, 1):
-                    print(f"  {i:2}. {col}")
-
             elif cmd == "full":
-                show_current(df, full=True)
-
-            elif cmd == "raw":
-                view_mode = "raw"
-                print("Switched to raw data view.")
-                show_current(df)
+                show(df, full=True)
 
             elif cmd == "sort":
                 key = arg.lower()
                 if key not in SORTABLE:
                     print(f"Usage: sort <{'|'.join(SORTABLE)}>")
                     continue
-                col, default_desc, regs_only = SORTABLE[key]
+                _, default_desc = SORTABLE[key]
                 if sort_key == key:
                     sort_desc = not sort_desc
                 else:
                     sort_key = key
                     sort_desc = default_desc
                 direction = "desc" if sort_desc else "asc"
-                if regs_only and view_mode != "regs":
-                    print(f"Sort set to {key} ({direction}) — applies to regs view")
-                else:
-                    if not regs_only:
-                        df = df.sort(col, descending=sort_desc)
-                    print(f"Sorted by {key} ({direction})")
-                    show_current(df)
+                print(f"Sorted by {key} ({direction})")
+                show(df)
 
             elif cmd == "address":
                 include_address = not include_address
                 print(f"Address column: {'on' if include_address else 'off'}")
-
-            elif cmd == "regs":
-                view_mode = "regs"
-                show_current(df)
+                show(df)
 
             elif cmd == "filter":
                 if not arg:
@@ -293,7 +244,7 @@ def run() -> None:
                 for col_name in FILTER_COLUMNS:
                     mask = mask | pl.col(col_name).str.contains(pattern)
                 df = df.filter(mask)
-                show_current(df)
+                show(df)
 
             elif cmd == "range":
                 date_parts = arg.split()
@@ -304,7 +255,7 @@ def run() -> None:
                 df = df.filter(
                     (pl.col("Order Date") >= start) & (pl.col("Order Date") <= end)
                 )
-                show_current(df)
+                show(df)
 
             elif cmd == "export":
                 if not arg:
@@ -313,11 +264,8 @@ def run() -> None:
                 filename = arg
                 if not filename.endswith(".csv"):
                     filename += ".csv"
-                col, _, _ = SORTABLE[sort_key]
-                if view_mode == "regs":
-                    out = regs_view(df, include_address, col, sort_desc)
-                else:
-                    out = df.drop("Shirt Sort Key")
+                col, _ = SORTABLE[sort_key]
+                out = regs_view(df, include_address, col, sort_desc)
                 path = Path("data") / filename
                 out.write_csv(path)
                 print(f"Exported {out.shape[0]} rows to {path}")
