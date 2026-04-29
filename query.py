@@ -29,8 +29,11 @@ SHOW_COLUMNS = [
 
 REG_COLUMNS = ["Name", "Email", "Shirt Size", "Registration Date"]
 
-SHIRT_SIZES = {"S", "M", "L", "XL", "2XL", "3XL", "XXL", "XXXL", "XS"}
+SHIRT_SIZES = {"S", "M", "L", "XL", "2XL", "3XL", "4XL", "XXL", "XXXL", "XS"}
 SHIRT_PATTERN = re.compile(r"(?:Standard|Fitted)\s+Cut\s+\w+", re.IGNORECASE)
+
+SIZE_ORDER = {"XS": 0, "S": 1, "M": 2, "L": 3, "XL": 4, "2XL": 5, "3XL": 6, "4XL": 7}
+CUT_ORDER = {"plain": 0, "fitted": 1, "standard": 2, "none": 3}
 
 ADDRESS_FIELDS = [
     "Recipient Address",
@@ -45,6 +48,7 @@ SORTABLE = {
     "date": ("Order Date", True),
     "name": ("Recipient Name", False),
     "email": ("Recipient Email", False),
+    "shirt": ("Shirt Size", False),
 }
 
 
@@ -89,6 +93,30 @@ def build_address(row: dict) -> str:
         if val and str(val).strip() and str(val).strip() not in ("", "None"):
             parts.append(str(val).strip())
     return ", ".join(parts)
+
+
+def shirt_sort_key(size: str) -> tuple[int, int]:
+    """Return (cut_rank, size_rank) for custom shirt sorting."""
+    if not size or size.strip() == "":
+        return (CUT_ORDER["none"], 99)
+
+    s = size.strip()
+    upper = s.upper()
+
+    # Determine cut type and extract base size
+    if upper.startswith("FITTED"):
+        cut = "fitted"
+        base = re.sub(r"^FITTED\s*(CUT\s*)?", "", upper).strip()
+    elif upper.startswith("STANDARD"):
+        cut = "standard"
+        base = re.sub(r"^STANDARD\s*(CUT\s*)?", "", upper).strip()
+    else:
+        cut = "plain"
+        base = upper
+
+    cut_rank = CUT_ORDER.get(cut, 3)
+    size_rank = SIZE_ORDER.get(base, 99)
+    return (cut_rank, size_rank)
 
 
 def build_registrations(df: pl.DataFrame, include_address: bool) -> pl.DataFrame:
@@ -154,7 +182,7 @@ Commands:
   name <text>            Filter where Recipient Name contains text
   email <text>           Filter where Recipient Email contains text
   show                   Show all matching rows (key columns)
-  sort <date|name|email> Sort results (toggles asc/desc)
+  sort <col>            Sort results (date|name|email|shirt, toggles asc/desc)
   regs                   Show registration list (Name, Email, Shirt, Date)
   address                Toggle address column in registration views
   columns                List all available columns
@@ -272,10 +300,13 @@ def run() -> None:
                 else:
                     sort_col = new_col
                     sort_desc = default_desc
-                df = df.sort(sort_col, descending=sort_desc)
                 direction = "desc" if sort_desc else "asc"
-                print(f"Sorted by {sort_col} ({direction})")
-                print_summary(df)
+                if sort_col == "Shirt Size":
+                    print(f"Sort set to Shirt Size ({direction}) — applies to regs view")
+                else:
+                    df = df.sort(sort_col, descending=sort_desc)
+                    print(f"Sorted by {sort_col} ({direction})")
+                    print_summary(df)
 
             elif cmd == "address":
                 include_address = not include_address
@@ -287,14 +318,23 @@ def run() -> None:
                 if regs.shape[0] == 0:
                     print("No rows to display.")
                 else:
-                    # Map full-data sort columns to registration columns
-                    reg_sort_map = {
-                        "Order Date": "Registration Date",
-                        "Recipient Name": "Name",
-                        "Recipient Email": "Email",
-                    }
-                    reg_sort = reg_sort_map.get(sort_col, "Registration Date")
-                    regs = regs.sort(reg_sort, descending=sort_desc)
+                    if sort_col == "Shirt Size":
+                        # Custom shirt sort by cut type then size
+                        keys = [shirt_sort_key(s) for s in regs.get_column("Shirt Size").to_list()]
+                        regs = regs.with_columns(
+                            pl.Series("_cut_rank", [k[0] for k in keys]),
+                            pl.Series("_size_rank", [k[1] for k in keys]),
+                        )
+                        regs = regs.sort(["_cut_rank", "_size_rank"], descending=sort_desc)
+                        regs = regs.drop("_cut_rank", "_size_rank")
+                    else:
+                        reg_sort_map = {
+                            "Order Date": "Registration Date",
+                            "Recipient Name": "Name",
+                            "Recipient Email": "Email",
+                        }
+                        reg_sort = reg_sort_map.get(sort_col, "Registration Date")
+                        regs = regs.sort(reg_sort, descending=sort_desc)
                     print_full(regs, regs.columns)
 
             elif cmd == "item":
@@ -338,6 +378,8 @@ def run() -> None:
                     if not rest:
                         print("Usage: export regs <filename.csv>")
                         continue
+                    if not rest.endswith(".csv"):
+                        rest += ".csv"
                     regs = build_registrations(df, include_address)
                     if regs.shape[0] == 0:
                         print("No rows to export.")
@@ -350,7 +392,10 @@ def run() -> None:
                     if not arg:
                         print("Usage: export <filename.csv>  or  export regs <filename.csv>")
                         continue
-                    path = Path("data") / arg
+                    filename = arg
+                    if not filename.endswith(".csv"):
+                        filename += ".csv"
+                    path = Path("data") / filename
                     df.write_csv(path)
                     print(f"Exported {df.shape[0]} rows to {path}")
 
