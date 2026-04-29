@@ -1,0 +1,8 @@
+[project]
+name = "registration-parsing"
+version = "0.1.0"
+description = "Python tool for parsing Square reports"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["polars"]
+authors = [{ name = "Magneto" }]

@@ -6,7 +6,7 @@ import sys
 if len(sys.argv) < 2:
     print("""This script will parse the square legacy orders export csv
 and parse it into useful useful csv's for workshops, tshirts, and reg
-    
+
     usage: parse.py orders-legacy-DATE-DATE.csv
 
     output: TYPE, fname, lname, email, detail
