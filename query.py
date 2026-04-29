@@ -207,7 +207,8 @@ def select_conference(all_data: pl.DataFrame) -> tuple[pl.DataFrame, str | None]
 
 def run() -> None:
     all_data = load_data()
-    print(f"Loaded {all_data.shape[0]} orders from {PARQUET_PATH}\n")
+    print(f"\n=== Square Order Explorer ===")
+    print(f"Loaded {all_data.shape[0]} orders. Type \"help\" for commands.\n")
 
     include_address = False
     sort_col = "Order Date"

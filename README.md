@@ -48,4 +48,4 @@ Select a conference (or all), then explore with filters. Example session:
 > back
 ```
 
-Type `help` in the REPL for all commands.
+Type `help` in the REPL for all available commands.
