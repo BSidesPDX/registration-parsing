@@ -28,6 +28,8 @@ CUT_RANK = {"plain": 0, "fitted": 1, "standard": 2}
 CUT_RE = re.compile(r"^(fitted|standard)\s+cut\s+(\S+)", re.IGNORECASE)
 QTY_PREFIX = re.compile(r"^\s*\d+\s*x\s*", re.IGNORECASE)
 
+HACKBOAT_TIERS = {"sailor", "captain", "admiral"}
+
 FILTER_COLUMNS = ["Recipient Name", "Recipient Email"]
 
 # friendly key -> (df column, default descending)
@@ -36,6 +38,7 @@ SORTABLE = {
     "name":  ("Recipient Name", False),
     "email": ("Recipient Email", False),
     "shirt": ("Shirt Sort Key", False),
+    "tier":  ("Tier", False),
 }
 
 
@@ -55,6 +58,23 @@ def parse_shirt(modifiers: str | None) -> tuple[str, int]:
             size_rank = SIZE_ORDER.get(m.group(2).upper(), 99)
             return (value, CUT_RANK[cut] * 100 + size_rank)
     return ("", 999)
+
+
+def parse_tier(modifiers: str | None, variation: str | None) -> str:
+    """Return the ticket tier (Sailor/Captain/Admiral) from Item Modifiers or Item Variation."""
+    if modifiers:
+        for part in modifiers.split(","):
+            value = QTY_PREFIX.sub("", part).strip()
+            if value.lower() in HACKBOAT_TIERS:
+                return value.title()
+    if variation:
+        # Early-format orders use "Participant: Sailor" in Item Variation.
+        prefix = "Participant: "
+        if variation.startswith(prefix):
+            tier = variation[len(prefix):].strip()
+            if tier.lower() in HACKBOAT_TIERS:
+                return tier.title()
+    return ""
 
 
 def build_address(row: dict) -> str:
@@ -77,17 +97,26 @@ def load_data() -> pl.DataFrame:
 
     shirts = [parse_shirt(m) for m in df.get_column("Item Modifiers").to_list()]
     addresses = [build_address(r) for r in df.select(ADDRESS_FIELDS).to_dicts()]
+    tiers = [
+        parse_tier(m, v)
+        for m, v in zip(
+            df.get_column("Item Modifiers").to_list(),
+            df.get_column("Item Variation").to_list(),
+        )
+    ]
     df = df.with_columns(
         pl.Series("Shirt Size", [s[0] for s in shirts]),
         pl.Series("Shirt Sort Key", [s[1] for s in shirts]),
         pl.Series("Address", addresses),
+        pl.Series("Tier", tiers),
     )
     return df.sort("Order Date", descending=True)
 
 
 def regs_view(df: pl.DataFrame, include_address: bool,
               sort_col: str, sort_desc: bool) -> pl.DataFrame:
-    cols = ["Recipient Name", "Recipient Email", "Shirt Size", "Shirt Sort Key"]
+    cols = ["Recipient Name", "Recipient Email", "Tier",
+            "Shirt Size", "Shirt Sort Key", "Item Quantity"]
     if include_address:
         cols.append("Address")
     cols.append("Order Date")
@@ -95,6 +124,7 @@ def regs_view(df: pl.DataFrame, include_address: bool,
     return out.rename({
         "Recipient Name": "Name",
         "Recipient Email": "Email",
+        "Item Quantity": "Qty",
         "Order Date": "Registration Date",
     })
 
@@ -117,7 +147,7 @@ def print_help() -> None:
 Commands:
   filter <text>          Filter by name or email
   range <start> <end>    Filter by date range (YYYY-MM-DD or YYYY/MM/DD)
-  sort <col>             Sort (date|name|email|shirt, toggles asc/desc)
+  sort <col>             Sort (date|name|email|shirt|tier, toggles asc/desc)
   address                Toggle address column
   count                  Show current row count
   full                   Show all rows (untruncated)
